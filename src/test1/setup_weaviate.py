@@ -445,15 +445,32 @@ def main():
         print(f"Using existing Weaviate instance on port {existing_port}")
         update_weaviate_tools(existing_port)
         
-        # Upload metadata to existing instance
+        # Upload metadata
+        print("\nUploading metadata to Weaviate...")
         try:
-            from upload_metadata import AllMySonsMetadataUploader
-            uploader = AllMySonsMetadataUploader(f"http://localhost:{existing_port}")
+            # Add the current directory and parent to Python path for imports
+            import sys
+            import os
+            current_dir = os.path.dirname(os.path.abspath(__file__))
+            parent_dir = os.path.dirname(current_dir)
+            sys.path.insert(0, current_dir)
+            sys.path.insert(0, parent_dir)
+            
+            # Now try to import
+            try:
+                from upload_metadata import AllMySonsMetadataUploader
+            except ImportError:
+                from test1.upload_metadata import AllMySonsMetadataUploader
+                
+            uploader = AllMySonsMetadataUploader(f"http://localhost:{weaviate_port}")
             uploader.upload_sample_metadata()
             uploader.upload_business_context()
             print("✓ Metadata uploaded successfully")
         except Exception as e:
             print(f"✗ Failed to upload metadata: {e}")
+            # Don't return here - setup is still successful even if metadata upload fails
+            print("You can manually upload metadata later by running:")
+            print("python src/test1/upload_metadata.py")
         return
     
     # Install dependencies

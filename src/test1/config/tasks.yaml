@@ -1,115 +1,76 @@
-task_planner_task:
+schema_analysis_task:
   description: >
-    The user asked: {question}
-
-    Analyze the question and generate a step-by-step plan to answer it using available agents.
-
-    You have access to All My Sons Moving Company's curated tables:
-    - move_size: Move size classification with 14 categories (Apt 1 Bedroom 10.8%, House 3 Bedroom 10.4%, Few Items 9.6%, etc.)
-    - move_type: Move service types with 24 categories (Local 17.8%, Long Distance 11.3%, Short Haul 11.0%, Labor Only 7.5%, etc.)
-
-    Ensure the plan respects task dependencies:
-    - Use the Metadata Agent before other agents if table schema information is needed
-    - Use the Knowledge Agent before querying if business definitions or operational context is required
-    - Use the Query Builder Agent to create SQL queries based on metadata and business context
-    - Use the Executor Agent to run queries and interpret results
-    - Ensure tasks are ordered logically for comprehensive analysis
-
-    Identify relevant tables, agent responsibilities, and describe each task clearly.
-  expected_output: >
-    A detailed step-by-step plan with tasks in the correct order, each specifying:
-    - Which agent is assigned to the task
-    - What the task should accomplish
-    - Any dependencies or required context from previous tasks
-    - Expected deliverables from each task
-  agent: task_planner
-
-metadata_task:
-  description: >
-    The user question is: "{question}"
-
-    Query the Weaviate metadata store to retrieve comprehensive information about relevant tables.
-    Focus on All My Sons Moving Company's curated tables:
-    - move_size: Contains movesizename, no_of_moves, move_year, move_month columns
-    - move_type: Contains movetypename, no_of_moves, move_year, move_month columns
-
-    Retrieve and explain:
-    - Complete table schemas with column names, types, and descriptions
-    - Business context and usage patterns for each table
-    - Data volume and time range coverage
-    - S3 paths and data lineage information
-    - Key business insights from the metadata (e.g., Local moves are 17.8% of volume)
-
-    Present the information clearly for other agents to use in query building and analysis.
-  expected_output: >
-    1. Complete schema information for relevant tables including column definitions
-    2. Business context explaining how each table is used for revenue analysis and operations
-    3. Data characteristics (row counts, time ranges, key categories and percentages)
-    4. Technical details (S3 paths, data types) needed for query construction
-    5. Key insights about data quality opportunities (e.g., Unknown categories)
-  agent: metadata_agent
-
-knowledge_task:
-  description: >
-    The user question is: "{question}"
-
-    Search the Weaviate business knowledge base for relevant definitions, policies, and operational context.
-    Focus on All My Sons Moving Company's business terminology related to:
-    - Revenue stream analysis and service type definitions
-    - Move size categories and operational planning
-    - Seasonal patterns and market analysis
-    - Pricing strategies and crew allocation logic
-
-    Provide business context that will help other agents:
-    - Understand key business terms and their definitions
-    - Apply appropriate business rules and operational logic
-    - Interpret data correctly within business context
-    - Identify revenue optimization opportunities
-  expected_output: >
-    1. Clear definitions of key business terms relevant to the question
-    2. Business rules and operational policies that affect data interpretation
-    3. Market context and competitive positioning insights
-    4. Revenue stream analysis framework and key performance indicators
-    5. Operational insights for pricing, crew allocation, and resource planning
-  agent: knowledge_agent
-
-query_builder_task:
-  description: >
-    Based on the metadata information and business context from previous agents, write precise SQL queries for All My Sons Moving Company's curated tables.
+    For the question: "{question}"
     
-    Use the schema information to query:
-    - move_size table: movesizename, no_of_moves, move_year, move_month columns
-    - move_type table: movetypename, no_of_moves, move_year, move_month columns
-
-    Ensure your queries:
-    - Use correct table and column names from the metadata
-    - Apply business logic and definitions from the knowledge agent
-    - Include appropriate time-based analysis (yearly/monthly trends)
-    - Calculate relevant business metrics (percentages, growth rates, seasonal patterns)
-    - Join tables appropriately when cross-analysis is needed
-    - Handle data quality issues (e.g., Unknown categories)
-  expected_output: >
-    1. Complete, executable SQL queries that address the user's question
-    2. Clear comments explaining the business logic and calculations
-    3. Expected result structure and key metrics to be calculated
-    4. Any data quality considerations or limitations to note
-  agent: query_builder_agent
-
-executor_task:
-  description: >
-    Execute the SQL queries on All My Sons Moving Company's curated data and provide business intelligence interpretation.
+    Search for the move_type table using search_table_metadata tool.
     
-    Execute queries against the move_size and move_type tables and:
-    - Return the raw query results
-    - Interpret findings within business context
-    - Identify key trends, patterns, and insights
-    - Highlight revenue optimization opportunities
-    - Note any data quality issues or anomalies
-    - Provide actionable business recommendations
+    Report ONLY these facts:
+    - Table name: move_type
+    - Columns found
+    - Row count
+    
+    DO NOT write SQL. DO NOT analyze data. Just report what exists.
   expected_output: >
-    1. Complete query execution results with data
-    2. Business interpretation of the findings
-    3. Key insights about revenue streams, operational efficiency, or market trends
-    4. Actionable recommendations for business optimization
-    5. Any data quality observations or improvement opportunities
-  agent: executor_agent
+    Table found: [name]
+    Columns: [list of column names]
+    Row count: [number]
+  agent: schema_analyst
+
+business_context_task:
+  description: >
+    For the question: "{question}"
+    
+    Search for business terms like "volume" or "move type".
+    
+    Define ONLY:
+    - What "volume" means in this context
+    - Any business rules about filtering or grouping
+    
+    DO NOT list actual move types or percentages.
+  expected_output: >
+    Term definitions:
+    - Volume: [definition]
+    - Business rules: [any filtering rules]
+  agent: business_context_agent
+
+query_building_task:
+  description: >
+    Using the table info and business rules from other agents,
+    write a SQL query for: "{question}"
+    
+    Requirements:
+    - Use only the table and columns reported by Schema Analyst
+    - Apply business rules from Business Context Agent
+    - Include comments explaining the query
+    
+    DO NOT include sample results or made-up data.
+  expected_output: >
+    ```sql
+    -- SQL query with comments
+    SELECT ...
+    FROM ...
+    WHERE ...
+    ORDER BY ...
+    LIMIT ...
+    ```
+    
+    Brief explanation of what the query does.
+  agent: query_builder
+
+query_execution_task:
+  description: >
+    Execute the EXACT SQL query from the Query Builder using AWS Athena.
+    
+    CRITICAL Requirements:
+    - Copy the SQL query EXACTLY as written by the Query Builder
+    - DO NOT modify, improve, or change the query in any way
+    - Use database: ams_mns_ai_curated_dev
+    - Use the execute_athena_query tool with the exact query
+    
+    If the query fails, report the error but DO NOT retry with modifications.
+  expected_output: >
+    Query Results:
+    [Actual results from Athena or error message]
+    
+    Summary: X rows returned (or error details)
+  agent: athena_executor

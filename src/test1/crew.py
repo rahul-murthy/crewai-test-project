@@ -1,117 +1,82 @@
 from crewai import Agent, Crew, Process, Task
 from crewai.project import CrewBase, agent, crew, task
-from crewai.agents.agent_builder.base_agent import BaseAgent
-from typing import List
-import sys
-import os
 
-# Add the project root to the path so we can import from tools
-project_root = os.path.abspath(os.path.join(os.path.dirname(__file__), '..', '..'))
-sys.path.insert(0, project_root)
-
-# Import your Weaviate tools
-from .tools.weaviate_tool import WeaviateQueryTool, WeaviateBusinessContextTool
+# Import your Weaviate tools directly
+from .tools.weaviate_tool import search_table_metadata, search_business_context
+from .tools.athena_tool import AthenaTool
 
 @CrewBase
 class Test1():
-    """Poc1 crew"""
+    """Streamlined crew for SQL query generation"""
 
-    agents: List[BaseAgent]
-    tasks: List[Task]
+    agents_config = 'config/agents.yaml'
+    tasks_config = 'config/tasks.yaml'
     
     @agent
-    def task_planner(self) -> Agent:
+    def schema_analyst(self) -> Agent:
         return Agent(
-            config=self.agents_config['task_planner'],
+            config=self.agents_config['schema_analyst'],
+            tools=[search_table_metadata],  # Use the actual tool function
             verbose=True
         )
     
     @agent
-    def metadata_agent(self) -> Agent:
+    def business_context_agent(self) -> Agent:
         return Agent(
-            config=self.agents_config['metadata_agent'],
-            verbose=True,
-            tools=[WeaviateQueryTool]
-        )
-    
-    @agent
-    def knowledge_agent(self) -> Agent:
-        return Agent(
-            config=self.agents_config['knowledge_agent'],
-            verbose=True,
-            tools=[WeaviateBusinessContextTool]
-        )
-    
-    @agent
-    def query_builder_agent(self) -> Agent:
-        return Agent(
-            config=self.agents_config['query_builder_agent'],
+            config=self.agents_config['business_context_agent'],
+            tools=[search_business_context],  # Use the actual tool function
             verbose=True
         )
     
     @agent
-    def executor_agent(self) -> Agent:
+    def query_builder(self) -> Agent:
         return Agent(
-            config=self.agents_config['executor_agent'],
+            config=self.agents_config['query_builder'],
             verbose=True
+        )
+    
+    athena_tool = AthenaTool()
+    @agent
+    def athena_executor(self) -> Agent:
+        return Agent(
+            config=self.agents_config['athena_executor'],
+            tools=[self.athena_tool]
         )
 
-    # Tasks
     @task
-    def task_planner_task(self) -> Task:
+    def schema_analysis_task(self) -> Task:
         return Task(
-            config=self.tasks_config['task_planner_task'],
-            output_file=f'Reports/Planner_Report.md'
+            config=self.tasks_config['schema_analysis_task'],
+            output_file='output/schema_analysis.md'
         )
     
     @task
-    def metadata_task(self) -> Task:
+    def business_context_task(self) -> Task:
         return Task(
-            config=self.tasks_config['metadata_task'],
-            output_file=f'Reports/Metadata_Report.md'
+            config=self.tasks_config['business_context_task'],
+            output_file='output/business_context.md'
         )
     
     @task
-    def knowledge_task(self) -> Task:
+    def query_building_task(self) -> Task:
         return Task(
-            config=self.tasks_config['knowledge_task'],
-            output_file=f'Reports/Knowledge_Report.md'
+            config=self.tasks_config['query_building_task'],
+            output_file='output/generated_queries.sql',
+            context=[self.schema_analysis_task(), self.business_context_task()]
         )
     
     @task
-    def query_builder_task(self) -> Task:
+    def query_execution_task(self) -> Task:
         return Task(
-            config=self.tasks_config['query_builder_task'],
-            output_file=f'Reports/Query_Builder_Report.md',
-            context=[self.metadata_task(), self.knowledge_task()]
-        )
-    
-    @task
-    def executor_task(self) -> Task:
-        return Task(
-            config=self.tasks_config['executor_task'],
-            output_file=f'Reports/Executor_Report.md',
-            context=[self.query_builder_task()]
+            config=self.tasks_config['query_execution_task'],
         )
 
     @crew
     def crew(self) -> Crew:
-        """Creates the Test1 crew"""
+        """Creates the streamlined Test1 crew"""
         return Crew(
-            agents=[
-                self.task_planner(),
-                self.metadata_agent(),
-                self.knowledge_agent(),
-                self.query_builder_agent(),
-                self.executor_agent()
-            ],
-            tasks=[
-                self.task_planner_task(),
-                self.metadata_task(),
-                self.knowledge_task(),
-                self.query_builder_task(),
-                self.executor_task()
-            ],
+            agents=self.agents,
+            tasks=self.tasks,
             process=Process.sequential,
             verbose=True,
         )

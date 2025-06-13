@@ -26,31 +26,36 @@ def search_table_metadata(query: str) -> str:
             results = []
             for obj in response.objects:
                 props = obj.properties
-                result = f"TABLE: {props.get('table_name', 'N/A')}\n"
-                result += f"Description: {props.get('description', 'N/A')}\n"
-                result += f"Business Context: {props.get('business_context', 'N/A')}\n"
+                result_parts = []
+                result_parts.append(f"TABLE: {props.get('table_name', 'N/A')}")
+                result_parts.append(f"Description: {props.get('description', 'N/A')}")
+                result_parts.append(f"Business Context: {props.get('business_context', 'N/A')}")
                 
                 # Fix the columns display issue
                 columns = props.get('columns', 'N/A')
                 if isinstance(columns, str):
-                    result += f"Columns: {columns}\n"
+                    result_parts.append(f"Columns: {columns}")
                 else:
-                    result += f"Columns: {', '.join(columns) if columns else 'N/A'}\n"
+                    result_parts.append(f"Columns: {json.dumps(columns) if columns else 'N/A'}")
                 
-                result += f"Row Count: {props.get('row_count', 'N/A')}\n"
-                result += f"S3 Path: {props.get('s3_path', 'N/A')}"
-                        
+                result_parts.append(f"Row Count: {props.get('row_count', 'N/A')}")
+                result_parts.append(f"S3 Path: {props.get('s3_path', 'N/A')}")
+                
+                # Join with newlines and strip each line
+                result = '\n'.join(line.strip() for line in result_parts)
                 results.append(result)
             
             client.close()
-            # Clean trailing whitespace to prevent Bedrock errors
-            return "\n\n".join(results).strip()
+            # Join results and ensure no trailing whitespace
+            final_result = '\n\n'.join(results)
+            # Remove any trailing whitespace or newlines
+            return final_result.rstrip()
         else:
             client.close()
-            return f"No tables found for query: {query}"
+            return f"No tables found for query: {query}".rstrip()
             
     except Exception as e:
-        return f"Error searching metadata: {str(e)}"
+        return f"Error searching metadata: {str(e)}".rstrip()
 
 @tool("search_business_context")
 def search_business_context(query: str) -> str:
@@ -73,21 +78,27 @@ def search_business_context(query: str) -> str:
             results = []
             for obj in response.objects:
                 props = obj.properties
-                result = f"Term: {props.get('term', 'N/A')}\n"
-                result += f"Definition: {props.get('definition', 'N/A')}\n"
-                result += f"Context: {props.get('context', 'N/A')}\n"
-                result += f"Examples: {props.get('examples', 'N/A')}"
+                result_parts = []
+                result_parts.append(f"Term: {props.get('term', 'N/A')}")
+                result_parts.append(f"Definition: {props.get('definition', 'N/A')}")
+                result_parts.append(f"Context: {props.get('context', 'N/A')}")
+                result_parts.append(f"Examples: {props.get('examples', 'N/A')}")
+                
+                # Join with newlines and strip each line
+                result = '\n'.join(line.strip() for line in result_parts)
                 results.append(result)
             
             client.close()
-            # Clean trailing whitespace to prevent Bedrock errors
-            return "\n\n".join(results).strip()
+            # Join results and ensure no trailing whitespace
+            final_result = '\n\n'.join(results)
+            # Remove any trailing whitespace or newlines
+            return final_result.rstrip()
         else:
             client.close()
-            return f"No business context found for: {query}"
+            return f"No business context found for: {query}".rstrip()
             
     except Exception as e:
-        return f"Error searching business context: {str(e)}"
+        return f"Error searching business context: {str(e)}".rstrip()
 
 # Export the tool objects for CrewAI
 WeaviateQueryTool = search_table_metadata

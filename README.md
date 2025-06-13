@@ -1,54 +1,149 @@
-# Test1 Crew
+# Streamlined SQL Query Generation Crew
 
-Welcome to the Test1 Crew project, powered by [crewAI](https://crewai.com). This template is designed to help you set up a multi-agent AI system with ease, leveraging the powerful and flexible framework provided by crewAI. Our goal is to enable your agents to collaborate effectively on complex tasks, maximizing their collective intelligence and capabilities.
+This is the optimized version of the All My Sons Moving Company query generation system, reduced from 5 agents to 3 essential agents.
 
-## Installation
+## 🎯 Overview
 
-Ensure you have Python >=3.10 <3.13 installed on your system. This project uses [UV](https://docs.astral.sh/uv/) for dependency management and package handling, offering a seamless setup and execution experience.
+The streamlined crew transforms business questions into SQL queries through a focused 3-agent workflow:
 
-First, if you haven't already, install uv:
+1. **Schema Analyst** → Identifies relevant tables and schemas
+2. **Business Context Agent** → Translates business terms to data concepts  
+3. **Query Builder** → Generates optimized SQL queries
 
+## 🚀 Quick Start
+
+### 1. Setup Weaviate
 ```bash
-pip install uv
+# Start Weaviate with metadata
+python src/test1/setup_weaviate.py
 ```
 
-Next, navigate to your project directory and install the dependencies:
-
-(Optional) Lock the dependencies and install them by using the CLI command:
+### 2. Run with Default Questions
 ```bash
-crewai install
-```
-### Customizing
+# Run multiple example questions
+crewai run
 
-**Add your `OPENAI_API_KEY` into the `.env` file**
-
-- Modify `src/test1/config/agents.yaml` to define your agents
-- Modify `src/test1/config/tasks.yaml` to define your tasks
-- Modify `src/test1/crew.py` to add your own logic, tools and specific args
-- Modify `src/test1/main.py` to add custom inputs for your agents and tasks
-
-## Running the Project
-
-To kickstart your crew of AI agents and begin task execution, run this from the root folder of your project:
-
-```bash
-$ crewai run
+# Or using Python directly
+python src/test1/main.py
 ```
 
-This command initializes the test1 Crew, assembling the agents and assigning them tasks as defined in your configuration.
+### 3. Run with Custom Question
+```bash
+# Single question via command line
+python src/test1/main.py "What are the top 5 move types by volume?"
+```
 
-This example, unmodified, will run the create a `report.md` file with the output of a research on LLMs in the root folder.
+## 👥 The Three Agents
 
-## Understanding Your Crew
+### 1. Schema Analyst
+- **Purpose**: Table and schema expert
+- **Tools**: `search_table_metadata`
+- **Output**: Identified tables, columns, data types, relationships
 
-The test1 Crew is composed of multiple AI agents, each with unique roles, goals, and tools. These agents collaborate on a series of tasks, defined in `config/tasks.yaml`, leveraging their collective skills to achieve complex objectives. The `config/agents.yaml` file outlines the capabilities and configurations of each agent in your crew.
+### 2. Business Context Agent  
+- **Purpose**: Business terminology translator
+- **Tools**: `search_business_context`
+- **Output**: Business definitions, rules, and logic
 
-## Support
+### 3. Query Builder
+- **Purpose**: SQL query generator
+- **Tools**: None (uses context from other agents)
+- **Output**: Production-ready SQL queries
 
-For support, questions, or feedback regarding the Test1 Crew or crewAI.
-- Visit our [documentation](https://docs.crewai.com)
-- Reach out to us through our [GitHub repository](https://github.com/joaomdmoura/crewai)
-- [Join our Discord](https://discord.com/invite/X4JWnZnxPb)
-- [Chat with our docs](https://chatg.pt/DWjSBZn)
+## 📊 Example Workflow
 
-Let's create wonders together with the power and simplicity of crewAI.
+**Question**: "What are the primary revenue streams, and how are they trending over time?"
+
+**Schema Analyst** finds:
+```
+Table: move_type
+Columns: movetypename, no_of_moves, move_year, move_month
+```
+
+**Business Context Agent** defines:
+```
+Revenue Streams = different movetypename values
+Trending = year-over-year comparison
+```
+
+**Query Builder** generates:
+```sql
+-- Revenue streams with year-over-year trends
+WITH yearly_revenue AS (
+    SELECT 
+        movetypename,
+        move_year,
+        SUM(no_of_moves) as total_moves
+    FROM move_type
+    GROUP BY movetypename, move_year
+)
+SELECT 
+    movetypename as revenue_stream,
+    move_year,
+    total_moves,
+    LAG(total_moves) OVER (PARTITION BY movetypename ORDER BY move_year) as prev_year_moves,
+    ROUND(100.0 * (total_moves - LAG(total_moves) OVER (PARTITION BY movetypename ORDER BY move_year)) / 
+          NULLIF(LAG(total_moves) OVER (PARTITION BY movetypename ORDER BY move_year), 0), 2) as yoy_growth_percent
+FROM yearly_revenue
+ORDER BY move_year DESC, total_moves DESC;
+```
+
+## 📁 Output Files
+
+Results are saved in the `output/` directory:
+- `schema_analysis.md` - Schema findings
+- `business_context.md` - Business context analysis  
+- `generated_queries.sql` - Final SQL queries
+- `query_[timestamp].sql` - Individual query files
+
+## 🔧 Customization
+
+### Add New Tables
+Update `upload_metadata.py` to include new table metadata:
+```python
+new_table_metadata = {
+    "table_name": "customer_summary",
+    "columns": ["customer_id", "total_moves", "lifetime_value"],
+    # ... more metadata
+}
+```
+
+### Modify Agent Behavior
+Edit `config/agents.yaml` to adjust agent personalities, goals, or tools.
+
+### Change LLM Model
+Update the `llm` parameter in `agents.yaml`:
+```yaml
+llm: bedrock/us.anthropic.claude-3-sonnet-20240229-v1:0
+```
+
+## 🎉 Benefits of Streamlined Approach
+
+1. **Faster Execution**: Fewer agents = less coordination overhead
+2. **Clearer Results**: Each agent has a specific, non-overlapping role
+3. **Easier Debugging**: Simpler workflow to troubleshoot
+4. **Lower Costs**: Fewer LLM calls
+5. **Better Focus**: Agents aren't duplicating efforts
+
+## 🐛 Troubleshooting
+
+### Weaviate Connection Issues
+```bash
+# Check if Weaviate is running
+curl http://localhost:8080/v1/meta
+
+# Restart Weaviate
+docker-compose down
+docker-compose up -d
+```
+
+### No Results from Tools
+```bash
+# Re-upload metadata
+python src/test1/upload_metadata.py
+```
+
+### Query Generation Errors
+- Check `output/` files for intermediate results
+- Ensure your question references known tables (move_size, move_type)
+- Verify business terms exist in the knowledge base
