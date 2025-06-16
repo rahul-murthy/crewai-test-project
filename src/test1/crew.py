@@ -3,7 +3,7 @@ from crewai.project import CrewBase, agent, crew, task
 
 # Import your Weaviate tools directly
 from .tools.weaviate_tool import search_table_metadata, search_business_context
-from .tools.athena_tool import AthenaTool
+from .tools.athena_tool import athena_execution_tool
 
 @CrewBase
 class Test1():
@@ -35,12 +35,18 @@ class Test1():
             verbose=True
         )
     
-    athena_tool = AthenaTool()
     @agent
     def athena_executor(self) -> Agent:
         return Agent(
             config=self.agents_config['athena_executor'],
-            tools=[self.athena_tool]
+            tools=[athena_execution_tool]
+        )
+    
+    @agent
+    def data_insights_analyst(self) -> Agent:
+        return Agent(
+            config=self.agents_config['data_insights_analyst'],
+            verbose=True
         )
 
     @task
@@ -69,6 +75,16 @@ class Test1():
     def query_execution_task(self) -> Task:
         return Task(
             config=self.tasks_config['query_execution_task'],
+            output_file='output/executed_queries.md',
+            context=[self.query_building_task()]
+        )
+    
+    @task
+    def adaptive_data_analysis_task(self) -> Task:
+        return Task(
+            config=self.tasks_config['adaptive_data_analysis_task'],
+            output_file='output/data_analysis_task.md',
+            context=[self.query_execution_task()]
         )
 
     @crew

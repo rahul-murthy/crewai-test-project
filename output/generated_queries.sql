@@ -1,24 +1,23 @@
 ```sql
--- This query finds the top 5 move types by total volume (number of moves)
--- It excludes the 'Unknown' move type category as per the business rules
--- and orders the results by the total number of moves in descending order
-
+-- This query finds the top 5 move types by total number of moves
 SELECT 
-  movetypename,
-  SUM(no_of_moves) AS total_moves
+  movetypename, 
+  no_of_moves,
+  ROUND(no_of_moves * 100.0 / (SELECT SUM(no_of_moves) FROM move_type), 2) AS pct_of_total
 FROM move_type
-WHERE movetypename <> 'Unknown'
-GROUP BY movetypename
-ORDER BY total_moves DESC
+ORDER BY no_of_moves DESC
 LIMIT 5;
 ```
 
-This query accomplishes the following:
+This query first selects the `movetypename`, `no_of_moves`, and calculates the percentage of total moves for each move type. It orders the results by the `no_of_moves` column in descending order and limits the output to the top 5 rows.
 
-1. Selects the `movetypename` column and calculates the `total_moves` for each move type by summing the `no_of_moves` column.
-2. Applies a `WHERE` clause to exclude the 'Unknown' move type category, as per the business rules.
-3. Groups the results by `movetypename` to aggregate the move counts for each move type.
-4. Orders the results by the `total_moves` column in descending order to get the top 5 move types.
-5. Limits the output to the top 5 rows using the `LIMIT 5` clause.
+The key steps are:
 
-This query provides the requested information about the top 5 move types by volume, while adhering to the provided business rules and schema constraints.
+1. Select the relevant columns from the `move_type` table: `movetypename`, `no_of_moves`
+2. Calculate the percentage of total moves for each move type by:
+   - Getting the total number of moves by summing `no_of_moves` across all rows
+   - Dividing each move type's `no_of_moves` by the total and rounding the percentage to 2 decimal places
+3. Order the results by `no_of_moves` in descending order to put the top move types first
+4. Limit the output to the top 5 rows
+
+This gives us the top 5 move types by total volume (number of moves) and their percentage of the overall moves.

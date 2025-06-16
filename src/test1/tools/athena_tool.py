@@ -1,115 +1,147 @@
-"""
-AWS Athena query execution tool for running SQL queries against S3 data.
-"""
-
+import os
+import json
 import time
+import logging
+from typing import Dict, Any, List
 import boto3
-from typing import Dict, Any, Optional
-from crewai.tools import BaseTool
-from pydantic import BaseModel, Field
+from dotenv import load_dotenv
+from crewai.tools import tool
 
+# Configure logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
-class AthenaToolInput(BaseModel):
-    """Input schema for Athena tool."""
-    query: str = Field(..., description="SQL query to execute")
-    database: str = Field(default="ams_mns_ai_curated_dev", description="Athena database name")
-    output_location: str = Field(
-        default="s3://allmysons-athena-results/", 
-        description="S3 location for query results"
-    )
-
-
-class AthenaTool(BaseTool):
-    name: str = "execute_athena_query"
-    description: str = """Execute SQL queries using AWS Athena against S3 data.
+@tool("athena_execution_tool")
+def athena_execution_tool(sql_query: str) -> str:
+    """
+    Enhanced Athena execution with comprehensive monitoring and error handling.
     
     Args:
-        query: SQL query to execute
-        database: Athena database name (default: allmysons_curated)
-        output_location: S3 location for results (default: s3://allmysons-athena-results/)
-        
-    Returns:
-        Query results as a list of dictionaries
-    """
-    args_schema: type[BaseModel] = AthenaToolInput
+        sql_query: The SQL query to execute
     
-    def _get_athena_client(self):
-        """Get or create Athena client."""
-        if not hasattr(self, '_athena_client'):
-            self._athena_client = boto3.client('athena')
-        return self._athena_client
+    Returns:
+        JSON string with results, performance metrics, or error information
+    """
+    logger.info("🚀 Enhanced Athena Execution Tool started")
+    
+    try:
+        # Initialize Athena client
+        athena_client = boto3.client(
+            'athena',
+            region_name=os.getenv('AWS_REGION', 'us-east-1')
+        )
         
-    def _run(self, query: str, database: str = "ams_mns_ai_curated_dev", 
-             output_location: str = "s3://allmysons-athena-results/") -> str:
-        """Execute the Athena query and return results."""
-        try:
-            athena_client = self._get_athena_client()
+        # Configure output location
+        account_id = os.getenv('AWS_ACCOUNT_ID', '226610659546')
+        region = os.getenv('AWS_REGION', 'us-east-1')
+        output_location = os.getenv(
+            'ATHENA_OUTPUT_LOCATION',
+            f"s3://athena-output-test-curated-{account_id}-{region}/"
+        )
+        
+        # Start query execution
+        start_time = time.time()
+        start_response = athena_client.start_query_execution(
+            QueryString=sql_query,
+            ResultConfiguration={
+                'OutputLocation': output_location,
+                'EncryptionConfiguration': {
+                    'EncryptionOption': 'SSE_S3'
+                }
+            },
+            QueryExecutionContext={
+                'Database': os.getenv('ATHENA_DATABASE', 'ams_ai_curated_catalog_dev')
+            },
+            WorkGroup=os.getenv('ATHENA_WORKGROUP', 'primary')
+        )
+        
+        query_execution_id = start_response['QueryExecutionId']
+        logger.info(f"🆔 Query ID: {query_execution_id}")
+        
+        # Poll for completion with exponential backoff
+        max_attempts = 60
+        poll_interval = 1
+        
+        for attempt in range(max_attempts):
+            response = athena_client.get_query_execution(QueryExecutionId=query_execution_id)
+            execution = response['QueryExecution']
+            status = execution['Status']['State']
             
-            # Start query execution
-            response = athena_client.start_query_execution(
-                QueryString=query,
-                QueryExecutionContext={'Database': database},
-                ResultConfiguration={'OutputLocation': output_location}
+            if status in ['SUCCEEDED', 'FAILED', 'CANCELLED']:
+                break
+            
+            time.sleep(min(poll_interval * (1.2 ** (attempt // 10)), 5))
+        
+        execution_time_ms = int((time.time() - start_time) * 1000)
+        
+        if status == 'SUCCEEDED':
+            # Get results
+            results_response = athena_client.get_query_results(
+                QueryExecutionId=query_execution_id,
+                MaxResults=1000
             )
             
-            query_execution_id = response['QueryExecutionId']
+            # Process results
+            result_set = results_response['ResultSet']
+            column_info = result_set['ResultSetMetadata']['ColumnInfo']
+            columns = [col['Label'] for col in column_info]
+            column_types = [col['Type'] for col in column_info]
             
-            # Wait for query to complete
-            max_attempts = 30
-            for attempt in range(max_attempts):
-                response = athena_client.get_query_execution(
-                    QueryExecutionId=query_execution_id
-                )
-                
-                status = response['QueryExecution']['Status']['State']
-                
-                if status == 'SUCCEEDED':
-                    break
-                elif status in ['FAILED', 'CANCELLED']:
-                    error_msg = response['QueryExecution']['Status'].get(
-                        'StateChangeReason', 'Query failed'
-                    )
-                    return f"Query failed: {error_msg}"
-                
-                time.sleep(1)  # Wait 1 second before checking again
+            rows = []
+            result_rows = result_set['Rows']
+            data_rows = result_rows[1:] if len(result_rows) > 1 else result_rows
             
-            # Get query results
-            results = []
-            paginator = athena_client.get_paginator('get_query_results')
+            for row in data_rows:
+                row_data = []
+                for cell in row['Data']:
+                    value = cell.get('VarCharValue')
+                    row_data.append(value)
+                rows.append(row_data)
             
-            for page in paginator.paginate(QueryExecutionId=query_execution_id):
-                # First row contains column names
-                if not results and 'ResultSet' in page:
-                    columns = [col['Label'] for col in page['ResultSet']['ResultSetMetadata']['ColumnInfo']]
-                    
-                    # Process data rows
-                    for row in page['ResultSet']['Rows'][1:]:  # Skip header row
-                        row_data = {}
-                        for i, cell in enumerate(row['Data']):
-                            row_data[columns[i]] = cell.get('VarCharValue', '')
-                        results.append(row_data)
+            # Extract performance statistics
+            statistics = execution.get('Statistics', {})
+            data_scanned_bytes = statistics.get('DataScannedInBytes', 0)
+            data_scanned_mb = round(data_scanned_bytes / (1024 * 1024), 2)
             
-            # Format results for display
-            if not results:
-                return "Query executed successfully but returned no results."
+            response_data = {
+                "status": "success",
+                "columns": columns,
+                "column_types": column_types,
+                "rows": rows,
+                "row_count": len(rows),
+                "performance_metrics": {
+                    "execution_time_ms": execution_time_ms,
+                    "engine_execution_time_ms": statistics.get('EngineExecutionTimeInMillis', execution_time_ms),
+                    "data_scanned_mb": data_scanned_mb,
+                    "data_scanned_bytes": data_scanned_bytes,
+                    "query_queue_time_ms": statistics.get('QueryQueueTimeInMillis', 0),
+                    "query_planning_time_ms": statistics.get('QueryPlanningTimeInMillis', 0)
+                },
+                "query_id": query_execution_id
+            }
             
-            # Create formatted output
-            output = f"Query returned {len(results)} rows:\n\n"
-            
-            # Add header
-            if results:
-                headers = list(results[0].keys())
-                output += " | ".join(headers) + "\n"
-                output += "-" * (len(" | ".join(headers))) + "\n"
-                
-                # Add data rows (limit to first 10 for readability)
-                for row in results[:10]:
-                    output += " | ".join(str(row.get(h, '')) for h in headers) + "\n"
-                
-                if len(results) > 10:
-                    output += f"\n... and {len(results) - 10} more rows"
-            
-            return output
-            
-        except Exception as e:
-            return f"Error executing query: {str(e)}"
+        else:
+            error_reason = execution['Status'].get('StateChangeReason', 'Query failed')
+            response_data = {
+                "status": "error",
+                "error": {
+                    "code": "EXECUTION_ERROR",
+                    "message": error_reason,
+                    "query_id": query_execution_id,
+                    "execution_time_ms": execution_time_ms
+                }
+            }
+        
+        logger.info(f"✅ Athena execution completed: {response_data['status']}")
+        return json.dumps(response_data, indent=2)
+        
+    except Exception as e:
+        logger.error(f"❌ Athena execution error: {e}")
+        return json.dumps({
+            "status": "error",
+            "error": {
+                "code": "TOOL_ERROR",
+                "message": str(e),
+                "type": type(e).__name__
+            }
+        }, indent=2)

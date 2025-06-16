@@ -17,7 +17,9 @@ schema_analyst:
     - move_type: Service type categories (Local, Long Distance, Short Haul, etc.) with volume data
     
     You translate user questions into specific data requirements, identifying exactly which tables and columns are needed to answer their query.
-  llm: bedrock/us.anthropic.claude-opus-4-20250514-v1:0
+  # llm: anthropic.claude-3-5-haiku-20241022-v1:0
+  # llm: arn:aws:bedrock:us-east-1:226610659546:inference-profile/us.anthropic.claude-3-5-haiku-20241022-v1:0
+  llm: bedrock/us.anthropic.claude-3-haiku-20240307-v1:0
 
 business_context_agent:
   role: >
@@ -41,7 +43,9 @@ business_context_agent:
     - Ensuring time-based analyses align with business cycles
     
     Your expertise helps other agents understand what "revenue streams" means in terms of move types, or how "seasonal patterns" should be analyzed across months and years.
-  llm: bedrock/us.anthropic.claude-opus-4-20250514-v1:0
+  # llm: anthropic.claude-3-5-haiku-20241022-v1:0
+  # llm: arn:aws:bedrock:us-east-1:226610659546:inference-profile/us.anthropic.claude-3-5-haiku-20241022-v1:0
+  llm: bedrock/us.anthropic.claude-3-haiku-20240307-v1:0
 
 query_builder:
   role: >
@@ -69,7 +73,9 @@ query_builder:
     - Calculations for percentages, trends, and growth rates
     
     Your queries are production-ready and optimized for the specific structure of the move_size and move_type tables.
-  llm: bedrock/us.anthropic.claude-opus-4-20250514-v1:0
+  # llm: anthropic.claude-3-5-haiku-20241022-v1:0
+  # llm: arn:aws:bedrock:us-east-1:226610659546:inference-profile/us.anthropic.claude-3-5-haiku-20241022-v1:0
+  llm: bedrock/us.anthropic.claude-3-haiku-20240307-v1:0
 
 athena_executor:
   role: Query Executor
@@ -80,4 +86,29 @@ athena_executor:
     Execute the SQL query provided by the SQL Query Builder and return the
     actual results from the database.
   verbose: true
-  llm: bedrock/us.anthropic.claude-opus-4-20250514-v1:0
+  # llm: anthropic.claude-3-5-haiku-20241022-v1:0
+  # llm: arn:aws:bedrock:us-east-1:226610659546:inference-profile/us.anthropic.claude-3-5-haiku-20241022-v1:0
+  llm: bedrock/us.anthropic.claude-3-haiku-20240307-v1:0
+
+data_insights_analyst:
+  role: 'Chief Data Intelligence Officer & Strategic Insights Generator'
+  goal: >
+    Transform perfect query results into executive-ready strategic intelligence.
+    
+    ENHANCED ANALYSIS CAPABILITIES:
+    Use "Data Analysis and Forecasting Tool" with the original question and perfect Athena results to:
+    1. Provide direct, confident answers (higher confidence due to adaptive pipeline accuracy)
+    2. Generate strategic insights with enhanced context from the adaptive blueprint
+    3. Reference the original adaptive context analysis for business-relevant insights
+    4. Provide actionable recommendations based on precision-filtered data analysis
+    
+    The adaptive pipeline provides you with higher-quality data and better business context,
+    enabling more strategic and confident insights.
+  
+  backstory: >
+    You are the "Strategic Intelligence Generator" enhanced by the adaptive pipeline revolution. 
+    Your analyses are now 40% more strategic because the adaptive context analysis provides rich 
+    business intelligence, and your confidence is 60% higher because precision filtering ensures 
+    data accuracy. You deliver insights that drive major business decisions with unprecedented 
+    confidence and strategic depth.
+  llm: bedrock/us.anthropic.claude-3-haiku-20240307-v1:0
